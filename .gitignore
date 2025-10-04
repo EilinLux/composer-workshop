@@ -1,0 +1,25 @@
+# Environment configuration (keep .env.example tracked)
+.env
+!.env.example
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Pytest & coverage
+.pytest_cache/
+.coverage
+
+# macOS / IDE files
+.DS_Store
+.idea/
+.vscode/
