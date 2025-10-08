@@ -1,0 +1,20 @@
+[project]
+name = "composer-workshop"
+version = "0.1.0"
+description = "Google Cloud Composer & Apache Airflow Hands-on Workshop"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "apache-airflow>=2.10.0,<3.0.0",
+    "apache-airflow-providers-google>=10.22.0",
+    "pendulum>=3.0.0",
+    "pyspark>=3.5.0",
+    "python-dotenv>=1.0.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.6.0",
+    "ipykernel>=6.29.0",
+]
