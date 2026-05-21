@@ -1,18 +1,28 @@
 # Google Cloud Composer & Apache Airflow Workshop
 
+> **Part 2 of 3 in the Google Cloud Data Engineering Series**
+> * **Part 1 — Compute Layer:** [`dataproc-workshop`](https://github.com/EilinLux/dataproc-workshop) *(Developing PySpark ETL jobs & `utils.py` on Dataproc Clusters and Dataproc Serverless)*
+> * **Part 2 — Orchestration Layer (This Repo):** [`composer-workshop`](https://github.com/EilinLux/composer-workshop) *(Scheduling, Deferrable Sensors, BigQuery Quality Gates & Local `DagBag` Testing with Cloud Composer 3)*
+> * **Part 3 — Production CI/CD Blueprint:** [`CiCdAirFlowDagTemplate`](https://github.com/EilinLux/CiCdAirFlowDagTemplate) *(Automated Cloud Build CI/CD pipelines for testing & syncing DAGs + `utils.zip` to Cloud Composer)*
+
+---
+
 ## What is Google Cloud Composer?
 
-As data platforms grow beyond a handful of scripts, scheduling jobs with `cron` or isolated cloud functions quickly breaks down. Pipelines need to wait on upstream file arrivals, coordinate multi-step transformations across **Cloud Storage**, **BigQuery**, and **Apache Spark**, retry transient failures with exponential backoff, and provide a single pane of glass for lineage and alerting.
+As data platforms grow beyond a handful of scripts, scheduling jobs with `cron` or isolated cloud functions quickly breaks down. Pipelines need to wait on upstream file arrivals, coordinate multi-step transformations across multiple gcp products (such as **Cloud Storage**, **BigQuery**, and **Apache Spark**), retry transient failures with exponential backoff, and provide a single pane of glass for lineage and alerting.
 
-**Apache Airflow** is the industry-standard open-source platform for programmatically authoring, scheduling, and monitoring workflows as **Directed Acyclic Graphs (DAGs)** in Python.
+A good solution for this need, Apache AirFlow + Cloud Composer. 
 
-**Google Cloud Composer** is Google Cloud's fully managed workflow orchestration service built on Apache Airflow. Instead of self-hosting and patching Airflow schedulers, metadata databases, message brokers, and worker clusters, Cloud Composer provisions and manages the entire stack for you:
+On one hand, **Apache Airflow** is the industry-standard open-source platform for programmatically authoring, scheduling, and monitoring workflows as **Directed Acyclic Graphs (DAGs)** in Python.
+
+On the other, **Google Cloud Composer** is Google Cloud's fully managed workflow orchestration service built on Apache Airflow. Instead of self-hosting and patching Airflow schedulers, metadata databases, message brokers, and worker clusters, Cloud Composer provisions and manages the entire stack for you:
 * **Zero-Ops Infrastructure**: Google manages the underlying compute (GKE Autopilot in Composer 2, or fully abstracted tenant infrastructure in **Composer 3**), the **Cloud SQL** metadata database, and the asynchronous **Airflow Triggerer** and **DAG Processor** services.
 * **GitOps-Friendly DAG Sync**: Dropping a Python file into your environment's **Cloud Storage** `/dags` folder automatically synchronizes it across all schedulers and workers.
 * **Deep GCP Integration**: Native, pre-installed operators and deferrable sensors for **BigQuery**, **Dataproc Serverless**, **Dataflow**, **Vertex AI**, and **Cloud Storage**, secured via Google Cloud **IAM** and **Private IP VPC networking**.
 * **Unified Observability**: Every task log, scheduler heartbeat, and worker metric streams directly into **Cloud Logging** and **Cloud Monitoring**.
 
 ![Cloud Composer Architecture](./artifacts/02_composer_architecture.png)
+*Source and rights reserved to TheCloudGirl.Dev*
 
 ---
 

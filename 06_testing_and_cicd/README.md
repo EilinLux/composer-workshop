@@ -38,3 +38,13 @@ From the repository root:
 ```bash
 bash 06_testing_and_cicd/scripts/01_run_dag_tests.sh
 ```
+
+---
+
+## Next Step: Graduate to the Production CI/CD Template ([`CiCdAirFlowDagTemplate`](https://github.com/EilinLux/CiCdAirFlowDagTemplate))
+
+Once your DAGs pass local `DagBag` integrity checks, see the companion repository **[`CiCdAirFlowDagTemplate`](https://github.com/EilinLux/CiCdAirFlowDagTemplate)** for a standalone production blueprint that:
+1. Automatically runs `pytest` on every Git push via **Cloud Build** (`test-dags.cloudbuild.yaml`).
+2. Packages helper PySpark modules (`utils.py` from **[`dataproc-workshop`](https://github.com/EilinLux/dataproc-workshop)**) into `utils.zip`.
+3. Synchronizes validated DAGs and `utils.zip` artefacts into your Cloud Composer bucket via `add-dags-to-composer.cloudbuild.yaml`.
+
