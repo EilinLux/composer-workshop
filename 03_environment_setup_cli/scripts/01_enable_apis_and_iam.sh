@@ -28,14 +28,24 @@ else
   exit 1
 fi
 
+# Ensure gcloud uses Python 3.12 (via uv) if the system default is Python 3.14+
+if command -v uv >/dev/null 2>&1; then
+  UV_PY312="$(uv python find 3.12 2>/dev/null || true)"
+  if [[ -n "${UV_PY312}" ]]; then
+    export CLOUDSDK_PYTHON="${UV_PY312}"
+  fi
+fi
+
 # ------------------------------------------------------------------------------
-# Step 1: Set Active Project & Enable Required APIs
+# Step 1: Set Active Project, Quota Project & Enable Required APIs
 # ------------------------------------------------------------------------------
-echo "==> [1/4] Setting active GCP project to '${GCP_PROJECT_ID}'..."
+echo "==> [1/4] Setting active GCP project and ADC quota project to '${GCP_PROJECT_ID}'..."
 gcloud config set project "${GCP_PROJECT_ID}"
+gcloud config set billing/quota_project "${GCP_PROJECT_ID}" >/dev/null 2>&1 || true
 
 echo "==> [2/4] Enabling required Google Cloud APIs..."
 gcloud services enable \
+  cloudresourcemanager.googleapis.com \
   composer.googleapis.com \
   dataproc.googleapis.com \
   bigquery.googleapis.com \
@@ -49,6 +59,8 @@ gcloud services enable \
   cloudbuild.googleapis.com \
   cloudfunctions.googleapis.com \
   --project="${GCP_PROJECT_ID}"
+
+gcloud auth application-default set-quota-project "${GCP_PROJECT_ID}" --quiet >/dev/null 2>&1 || true
 
 # ------------------------------------------------------------------------------
 # Step 2: Create Custom Worker Service Account (Idempotent)
