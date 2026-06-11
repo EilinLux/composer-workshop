@@ -114,6 +114,7 @@ def main() -> None:
             .groupBy("product_id")
             .agg(F.sum("amount").alias("total_sales"))
             .withColumn("processing_date", F.lit(args.processing_date).cast(DateType()))
+            .withColumn("processed_timestamp", F.current_timestamp())
         )
 
         # Log transformed schema and row count for observability in Cloud Logging

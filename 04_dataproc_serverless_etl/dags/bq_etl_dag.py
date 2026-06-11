@@ -87,6 +87,7 @@ BQ_OUTPUT_TABLE_SCHEMA = [
     {"name": "product_id", "type": "STRING", "mode": "NULLABLE"},
     {"name": "total_sales", "type": "FLOAT", "mode": "NULLABLE"},
     {"name": "processing_date", "type": "DATE", "mode": "NULLABLE"},
+    {"name": "processed_timestamp", "type": "TIMESTAMP", "mode": "REQUIRED"},
 ]
 
 # Dedicated GCS bucket used by Dataproc Serverless for job staging and by the
