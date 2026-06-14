@@ -31,12 +31,21 @@ In this chapter, we validate every DAG in the workshop locally using **`uv`** an
 
 ---
 
-## How to Run the Script
+## Local `uv` Setup & Running the Tests
 
 From the repository root:
 
 ```bash
+# 1. Create or synchronize the .venv virtual environment from pyproject.toml
+uv sync
+
+# 2. (Optional) Register the uv environment as a Jupyter kernel for interactive notebooks
+uv run python -m ipykernel install --user --name composer-workshop --display-name "Python (composer-workshop)"
+
+# 3. Run the automated DAG integrity test suite
 bash 06_testing_and_cicd/scripts/01_run_dag_tests.sh
+# or directly via uv:
+uv run pytest 06_testing_and_cicd/tests/test_dag_integrity.py -v
 ```
 
 ---

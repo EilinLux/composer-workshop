@@ -4,6 +4,8 @@
 
 In this chapter, we build, deploy, and trigger an end-to-end **BigQuery + Dataproc Serverless PySpark ETL pipeline** orchestrated by **Google Cloud Composer**.
 
+> **Google Cloud Console Naming Note**: In the Google Cloud Console and BigQuery Studio, **Dataproc** and **Dataproc Serverless** now appear under **Managed Apache Spark** / **Google Cloud Serverless for Apache Spark** (with **Batches** for serverless runs and **Clusters** for Compute Engine clusters). The underlying API (`dataproc.googleapis.com`), `gcloud dataproc` CLI, and Airflow operators (`DataprocCreateBatchOperator`) retain the `dataproc` naming.
+
 ### What We Are Going to Do
 1. **Seed the Upstream BigQuery Table (`sales_data`)**: Create the `example_composer_workshop` dataset and populate `sales_data` with sample transactions partitioned by `transaction_date` and clustered by `product_id`.
 2. **Understand the PySpark Application ([`spark_apps/bq_etl_job.py`](./spark_apps/bq_etl_job.py))**:

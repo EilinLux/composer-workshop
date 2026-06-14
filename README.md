@@ -51,10 +51,10 @@ With the architecture clear, you put on the Platform Engineer hat in [`03_enviro
 2. Provision a **custom VPC network and subnetwork** with Private Google Access and internal firewall rules for Spark communication.
 3. Launch your private-IP **Cloud Composer 3** environment (and learn how to tear it down cleanly when finished to avoid ongoing billing).
 
-### Act IV — Orchestrating Heavy Compute with Dataproc Serverless & BigQuery ([`04_dataproc_serverless_etl/`](./04_dataproc_serverless_etl/README.md))
+### Act IV — Orchestrating Heavy Compute with Dataproc Serverless (*Managed Apache Spark*) & BigQuery ([`04_dataproc_serverless_etl/`](./04_dataproc_serverless_etl/README.md))
 Now that your Composer environment is running, it is time to process real data in [`04_dataproc_serverless_etl/`](./04_dataproc_serverless_etl/README.md). You seed an upstream **BigQuery** table (`sales_data`) with retail transactions ([`01_seed_bigquery_data.sh`](./04_dataproc_serverless_etl/scripts/01_seed_bigquery_data.sh)) and deploy a multi-step ETL pipeline ([`bq_etl_dag.py`](./04_dataproc_serverless_etl/dags/bq_etl_dag.py)) that:
 1. Idempotently creates the target BigQuery dataset and table (`BigQueryCreateEmptyDatasetOperator` & `BigQueryCreateTableOperator`).
-2. Submits a **PySpark** batch job ([`bq_etl_job.py`](./04_dataproc_serverless_etl/spark_apps/bq_etl_job.py)) to **Dataproc Serverless** via `DataprocCreateBatchOperator` to aggregate daily revenue per product and write the results back to BigQuery (`filtered_sales`).
+2. Submits a **PySpark** batch job ([`bq_etl_job.py`](./04_dataproc_serverless_etl/spark_apps/bq_etl_job.py)) to **Dataproc Serverless** (*now labeled **Managed Apache Spark / Google Cloud Serverless for Apache Spark** in the Google Cloud Console*) via `DataprocCreateBatchOperator` to aggregate daily revenue per product and write the results back to BigQuery (`filtered_sales`).
 3. Teaches you how to manage **Airflow Variables** (`var.value.*`) and debug task failures in the Airflow Web UI.
 
 ### Act V — Making the Pipeline Event-Driven & Self-Validating ([`05_deferrable_sensors_and_bigquery/`](./05_deferrable_sensors_and_bigquery/README.md))
@@ -185,11 +185,49 @@ composer-workshop/
 
 ---
 
-## End-to-End Quick Start
+## Local Environment Setup (`uv` & Jupyter Kernel)
+
+This repository uses **[`uv`](https://docs.astral.sh/uv/)** (`pyproject.toml`) to manage `apache-airflow`, `apache-airflow-providers-google`, `pyspark`, `python-dotenv`, `pytest`, and `ipykernel` inside an isolated `.venv` virtual environment.
+
+### 1. Install `uv` (if not already installed)
+```bash
+# macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# or via Homebrew:
+brew install uv
+```
+
+### 2. Create or Synchronize the Virtual Environment (`uv sync`)
+```bash
+# Synchronize .venv from pyproject.toml (installs Airflow, GCP providers, PySpark, pytest, ipykernel)
+uv sync
+
+# (Optional) If initializing a new project from scratch with uv:
+# uv init --python 3.12
+# uv add "apache-airflow>=2.10.0,<3.0.0" "apache-airflow-providers-google>=10.22.0" pyspark python-dotenv
+# uv add --dev pytest ruff ipykernel
+```
+
+### 3. Register & Select the Jupyter Kernel (Prevents `ModuleNotFoundError: No module named 'airflow'` or `'pyspark'`)
+If you open any `.ipynb` notebook locally in VS Code / Cursor / Antigravity / JupyterLab and see `ModuleNotFoundError`, your notebook is attached to the global system Python instead of `.venv`. Register and select the `uv` kernel:
+```bash
+# Register the .venv as a named Jupyter kernel
+uv run python -m ipykernel install --user --name composer-workshop --display-name "Python (composer-workshop)"
+```
+Then click the **Kernel selector** in the top-right corner of the notebook editor and choose **`Python (composer-workshop)`** (or `.venv/bin/python`).
+
+---
+
+## End-to-End Quick Start (Google Cloud CLI & Scripts)
 
 ```bash
-# 0. Authenticate with Google Cloud and configure your .env file
+# 0. Authenticate with Google Cloud, set ADC quota project, and configure .env
 gcloud auth login
+gcloud auth application-default login
+PROJECT_ID=$(gcloud config get-value project)
+gcloud config set project "$PROJECT_ID"
+gcloud config set billing/quota_project "$PROJECT_ID"
+gcloud auth application-default set-quota-project "$PROJECT_ID"
 cp .env.example .env
 # Edit .env with your GCP_PROJECT_ID (e.g., gai-community29oct-7500)
 
