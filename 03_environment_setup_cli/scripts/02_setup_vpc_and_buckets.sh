@@ -13,12 +13,21 @@
 #   3. Creates an internal firewall rule (`allow-internal-dataproc-traffic`) allowing
 #      Spark driver and executor nodes on Dataproc Serverless to communicate across
 #      all TCP/UDP/ICMP ports within the subnet's primary CIDR range.
-#   4. Creates the Cloud Storage buckets (`GCS_DAG_BUCKET` and `SPARK_TEMP_BUCKET`).
+#   4. Creates the Cloud Storage buckets (`GCS_DAG_BUCKET` and `SPARK_TEMP_BUCKET`)
+#      and grants bucket-level `roles/storage.admin` to the worker service account
+#      and Compute Engine default service account.
 # ==============================================================================
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+if command -v uv >/dev/null 2>&1; then
+  UV_PY312="$(uv python find 3.12 2>/dev/null || true)"
+  if [[ -n "${UV_PY312}" ]]; then
+    export CLOUDSDK_PYTHON="${UV_PY312}"
+  fi
+fi
 
 if [[ -f "${REPO_ROOT}/.env" ]]; then
   set -a
@@ -56,14 +65,16 @@ if ! gcloud compute networks subnets describe "${SUBNET_NAME}" --region="${GCP_R
     --secondary-range="${GKE_SERVICES_RANGE_NAME}=${GKE_SERVICES_IP_RANGE}" \
     --project="${GCP_PROJECT_ID}"
 else
-  echo "    Subnetwork '${SUBNET_NAME}' already exists."
+  echo "    Subnetwork '${SUBNET_NAME}' already exists (ensuring Private Google Access is enabled)..."
+  gcloud compute networks subnets update "${SUBNET_NAME}" \
+    --region="${GCP_REGION}" \
+    --enable-private-ip-google-access \
+    --project="${GCP_PROJECT_ID}" >/dev/null 2>&1 || true
 fi
 
 # ------------------------------------------------------------------------------
 # Step 3: Create Internal Firewall Rule for Spark Executor Communication
 # ------------------------------------------------------------------------------
-# Dataproc Serverless batches require open internal communication (TCP/UDP/ICMP)
-# between driver and executor VMs within the primary subnet CIDR range.
 echo "==> [3/4] Creating internal firewall rule 'allow-internal-dataproc-traffic'..."
 if ! gcloud compute firewall-rules describe allow-internal-dataproc-traffic --project="${GCP_PROJECT_ID}" >/dev/null 2>&1; then
   gcloud compute firewall-rules create allow-internal-dataproc-traffic \
@@ -81,9 +92,12 @@ else
 fi
 
 # ------------------------------------------------------------------------------
-# Step 4: Create Cloud Storage Buckets for DAGs and Spark Staging
+# Step 4: Create Cloud Storage Buckets & Bind Bucket-Level IAM Permissions
 # ------------------------------------------------------------------------------
-echo "==> [4/4] Creating Cloud Storage buckets ('gs://${GCS_DAG_BUCKET}' and 'gs://${SPARK_TEMP_BUCKET}')..."
+echo "==> [4/4] Creating Cloud Storage buckets ('gs://${GCS_DAG_BUCKET}' and 'gs://${SPARK_TEMP_BUCKET}') and binding IAM..."
+PROJECT_NUMBER="$(gcloud projects describe "${GCP_PROJECT_ID}" --format='value(projectNumber)')"
+COMPUTE_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+
 for BUCKET in "${GCS_DAG_BUCKET}" "${SPARK_TEMP_BUCKET}"; do
   if ! gcloud storage buckets describe "gs://${BUCKET}" --project="${GCP_PROJECT_ID}" >/dev/null 2>&1; then
     gcloud storage buckets create "gs://${BUCKET}" \
@@ -92,6 +106,20 @@ for BUCKET in "${GCS_DAG_BUCKET}" "${SPARK_TEMP_BUCKET}"; do
       --project="${GCP_PROJECT_ID}"
   else
     echo "    Bucket 'gs://${BUCKET}' already exists."
+  fi
+
+  # Grant bucket-level Storage Admin to the Compute Engine default service account
+  gcloud storage buckets add-iam-policy-binding "gs://${BUCKET}" \
+    --member="serviceAccount:${COMPUTE_SA}" \
+    --role="roles/storage.admin" \
+    --project="${GCP_PROJECT_ID}" >/dev/null
+
+  # Also grant bucket-level Storage Admin to the custom service account if it exists
+  if gcloud iam service-accounts describe "${SERVICE_ACCOUNT_EMAIL}" --project="${GCP_PROJECT_ID}" >/dev/null 2>&1; then
+    gcloud storage buckets add-iam-policy-binding "gs://${BUCKET}" \
+      --member="serviceAccount:${SERVICE_ACCOUNT_EMAIL}" \
+      --role="roles/storage.admin" \
+      --project="${GCP_PROJECT_ID}" >/dev/null || true
   fi
 done
 

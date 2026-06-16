@@ -17,6 +17,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHAPTER_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REPO_ROOT="$(cd "${CHAPTER_DIR}/.." && pwd)"
 
+if command -v uv >/dev/null 2>&1; then
+  UV_PY312="$(uv python find 3.12 2>/dev/null || true)"
+  if [[ -n "${UV_PY312}" ]]; then
+    export CLOUDSDK_PYTHON="${UV_PY312}"
+  fi
+fi
+
 if [[ -f "${REPO_ROOT}/.env" ]]; then
   set -a
   # shellcheck disable=SC1091

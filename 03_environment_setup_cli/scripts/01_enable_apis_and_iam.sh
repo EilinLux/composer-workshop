@@ -5,18 +5,26 @@
 #
 # What this script does:
 #   1. Loads your project and Service Account variables from the root `.env` file.
-#   2. Sets the active `gcloud` project (`GCP_PROJECT_ID`).
+#   2. Sets the active `gcloud` project (`GCP_PROJECT_ID`) and ADC quota project.
 #   3. Enables all Google Cloud APIs required by Cloud Composer, Dataproc, and BigQuery.
 #   4. Creates a custom Service Account (`SERVICE_ACCOUNT_NAME`) for Airflow workers.
-#   5. Grants least-privilege IAM roles to the custom worker Service Account.
-#   6. Grants `roles/composer.ServiceAgentV2Ext` to Google's managed Composer
-#      Service Agent (`service-<PROJECT_NUMBER>@cloudcomposer-accounts.iam.gserviceaccount.com`).
+#   5. Grants least-privilege IAM roles to the custom worker Service Account (or
+#      gracefully falls back to the pre-authorized Compute Engine default service
+#      account `<PROJECT_NUMBER>-compute@developer.gserviceaccount.com` in
+#      sandbox/lab environments where project-level `setIamPolicy` is restricted).
 # ==============================================================================
 set -euo pipefail
 
 # Locate the repository root and source `.env`
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+if command -v uv >/dev/null 2>&1; then
+  UV_PY312="$(uv python find 3.12 2>/dev/null || true)"
+  if [[ -n "${UV_PY312}" ]]; then
+    export CLOUDSDK_PYTHON="${UV_PY312}"
+  fi
+fi
 
 if [[ -f "${REPO_ROOT}/.env" ]]; then
   set -a
@@ -26,14 +34,6 @@ if [[ -f "${REPO_ROOT}/.env" ]]; then
 else
   echo "Error: .env file not found at ${REPO_ROOT}/.env. Run 'cp .env.example .env' first."
   exit 1
-fi
-
-# Ensure gcloud uses Python 3.12 (via uv) if the system default is Python 3.14+
-if command -v uv >/dev/null 2>&1; then
-  UV_PY312="$(uv python find 3.12 2>/dev/null || true)"
-  if [[ -n "${UV_PY312}" ]]; then
-    export CLOUDSDK_PYTHON="${UV_PY312}"
-  fi
 fi
 
 # ------------------------------------------------------------------------------
@@ -69,7 +69,7 @@ echo "==> [3/4] Creating custom Service Account '${SERVICE_ACCOUNT_NAME}' (if no
 if ! gcloud iam service-accounts describe "${SERVICE_ACCOUNT_EMAIL}" --project="${GCP_PROJECT_ID}" >/dev/null 2>&1; then
   gcloud iam service-accounts create "${SERVICE_ACCOUNT_NAME}" \
     --display-name="Service Account for Cloud Composer Environment" \
-    --project="${GCP_PROJECT_ID}"
+    --project="${GCP_PROJECT_ID}" || true
 else
   echo "    Service Account '${SERVICE_ACCOUNT_EMAIL}' already exists."
 fi
@@ -77,11 +77,10 @@ fi
 # ------------------------------------------------------------------------------
 # Step 3: Bind IAM Roles to Worker Service Account & Composer Service Agent
 # ------------------------------------------------------------------------------
-# - composer.worker & container.nodeServiceAccount: Core roles to run Composer worker pods
-# - compute.networkUser: Required to attach workers and Dataproc batches to our custom VPC
-# - storage.objectAdmin: Read/write DAGs, logs, and Spark staging files in GCS
-# - bigquery.*: Create datasets/tables, run queries, and read via BigQuery Storage API
-# - dataproc.* & iam.serviceAccountUser: Submit and run Dataproc Serverless Spark batches
+PROJECT_NUMBER="$(gcloud projects describe "${GCP_PROJECT_ID}" --format='value(projectNumber)')"
+COMPUTE_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+COMPOSER_SERVICE_AGENT="service-${PROJECT_NUMBER}@cloudcomposer-accounts.iam.gserviceaccount.com"
+
 echo "==> [4/4] Granting IAM roles to '${SERVICE_ACCOUNT_EMAIL}'..."
 ROLES=(
   "roles/composer.worker"
@@ -98,24 +97,31 @@ ROLES=(
   "roles/monitoring.metricWriter"
 )
 
-for ROLE in "${ROLES[@]}"; do
-  echo "    Binding ${ROLE}..."
-  gcloud projects add-iam-policy-binding "${GCP_PROJECT_ID}" \
-    --member="serviceAccount:${SERVICE_ACCOUNT_EMAIL}" \
-    --role="${ROLE}" \
-    --project="${GCP_PROJECT_ID}" \
-    --quiet >/dev/null
-done
-
-# Retrieve the numeric Project Number to construct the Google-managed Composer Service Agent email
-PROJECT_NUMBER="$(gcloud projects describe "${GCP_PROJECT_ID}" --format='value(projectNumber)')"
-COMPOSER_SERVICE_AGENT="service-${PROJECT_NUMBER}@cloudcomposer-accounts.iam.gserviceaccount.com"
-
-echo "    Granting roles/composer.ServiceAgentV2Ext to '${COMPOSER_SERVICE_AGENT}'..."
-gcloud projects add-iam-policy-binding "${GCP_PROJECT_ID}" \
-  --member="serviceAccount:${COMPOSER_SERVICE_AGENT}" \
-  --role="roles/composer.ServiceAgentV2Ext" \
+if gcloud projects add-iam-policy-binding "${GCP_PROJECT_ID}" \
+  --member="serviceAccount:${SERVICE_ACCOUNT_EMAIL}" \
+  --role="roles/composer.worker" \
   --project="${GCP_PROJECT_ID}" \
-  --quiet >/dev/null || true
+  --quiet >/dev/null 2>&1; then
+  for ROLE in "${ROLES[@]}"; do
+    echo "    Binding ${ROLE}..."
+    gcloud projects add-iam-policy-binding "${GCP_PROJECT_ID}" \
+      --member="serviceAccount:${SERVICE_ACCOUNT_EMAIL}" \
+      --role="${ROLE}" \
+      --project="${GCP_PROJECT_ID}" \
+      --quiet >/dev/null
+  done
+
+  echo "    Granting roles/composer.ServiceAgentV2Ext to '${COMPOSER_SERVICE_AGENT}'..."
+  gcloud projects add-iam-policy-binding "${GCP_PROJECT_ID}" \
+    --member="serviceAccount:${COMPOSER_SERVICE_AGENT}" \
+    --role="roles/composer.ServiceAgentV2Ext" \
+    --project="${GCP_PROJECT_ID}" \
+    --quiet >/dev/null 2>&1 || true
+else
+  echo "    Note: Project-level setIamPolicy is restricted for this account in the lab environment."
+  echo "    Falling back to the pre-authorized Compute Engine default service account:"
+  echo "      ${COMPUTE_SA}"
+  echo "    (Bucket-level Storage Admin permissions will be bound in 02_setup_vpc_and_buckets.sh)"
+fi
 
 echo "API activation and IAM configuration completed for '${GCP_PROJECT_ID}'."
